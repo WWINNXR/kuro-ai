@@ -18,7 +18,6 @@ export async function buildDailySummary(
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toLocaleDateString("en-CA", { timeZone: TZ });
 
-  // Fetch today's events
   const { data: events } = await supabase
     .from("events")
     .select("title, start_at")
@@ -28,10 +27,11 @@ export async function buildDailySummary(
     .order("start_at")
     .limit(5);
 
-  // Fetch bills due today or in 3 days
   const threeDaysLater = new Date(now);
   threeDaysLater.setDate(threeDaysLater.getDate() + 3);
-  const threeDaysStr = threeDaysLater.toLocaleDateString("en-CA", { timeZone: TZ });
+  const threeDaysStr = threeDaysLater.toLocaleDateString("en-CA", {
+    timeZone: TZ,
+  });
 
   const { data: bills } = await supabase
     .from("bills")
@@ -43,7 +43,6 @@ export async function buildDailySummary(
     .order("next_due_at")
     .limit(5);
 
-  // Fetch yesterday's expense total
   const { data: yesterdayExpenses } = await supabase
     .from("expenses")
     .select("amount")
@@ -56,73 +55,85 @@ export async function buildDailySummary(
     0
   );
 
-  // ── Compose message ─────────────────────────────────────────────────────────
+  const hasEvents = events && events.length > 0;
+  const hasBills = bills && bills.length > 0;
+  const hasSpending = yesterdayTotal > 0;
 
-  const hasContent =
-    (events && events.length > 0) ||
-    (bills && bills.length > 0) ||
-    yesterdayTotal > 0;
-
-  if (!hasContent) {
+  if (!hasEvents && !hasBills && !hasSpending) {
     return language === "th"
-      ? `สวัสดีตอนเช้า 🐾\nวันนี้ยังไม่มีนัดหมายหรือบิลที่ต้องจ่าย\nมีอะไรให้ช่วยบอก Kuro ได้เลยนะ 🖤`
-      : `Good morning 🐾\nNo events or bills due today.\nJust chat if you need anything 🖤`;
+      ? `วันนี้ยังค่อนข้างว่างครับ 🐾
+
+ยังไม่พบนัดหมาย บิลที่ใกล้ครบกำหนด หรือรายจ่ายเมื่อวาน
+
+ถ้ามีอะไรให้ช่วย จัดการผ่าน LINE ได้เลยครับ`
+      : `Your day looks clear 🐾
+
+No events, upcoming bills, or spending records found.
+
+Just message me if you need anything.`;
   }
 
   const lines: string[] = [];
 
   if (language === "th") {
-    lines.push("สวัสดีตอนเช้า 🐾 วันนี้ของคุณ:");
+    lines.push("🌤️ สรุปวันนี้ครับ");
   } else {
-    lines.push("Good morning 🐾 Here's your day:");
+    lines.push("🌤️ Today's briefing");
   }
 
-  // Events section
-  if (events && events.length > 0) {
+  if (hasEvents) {
     lines.push("");
-    lines.push(language === "th" ? "📅 นัดหมาย" : "📅 Appointments");
+    lines.push(language === "th" ? "📅 นัดหมายวันนี้" : "📅 Appointments");
+
     for (const e of events) {
       const t = new Date(e.start_at).toLocaleTimeString("th-TH", {
         timeZone: TZ,
         hour: "2-digit",
         minute: "2-digit",
       });
-      lines.push(`  • ${t} — ${e.title}`);
+
+      lines.push(`• ${t} — ${e.title}`);
     }
   }
 
-  // Bills section
-  if (bills && bills.length > 0) {
+  if (hasBills) {
     lines.push("");
-    lines.push(language === "th" ? "💸 บิลที่ใกล้ครบกำหนด" : "💸 Bills due soon");
+    lines.push(
+      language === "th" ? "💳 บิลที่ใกล้ครบกำหนด" : "💳 Bills due soon"
+    );
+
     for (const b of bills) {
-      const dueStr = b.next_due_at === todayStr
-        ? language === "th" ? "วันนี้!" : "Today!"
-        : language === "th"
-        ? `${formatDateShort(b.next_due_at)}`
-        : formatDateShort(b.next_due_at);
+      const dueStr =
+        b.next_due_at === todayStr
+          ? language === "th"
+            ? "วันนี้"
+            : "today"
+          : formatDateShort(b.next_due_at);
+
       const amtStr = b.amount
-        ? ` ${Number(b.amount).toLocaleString("th-TH")} บาท`
+        ? ` — ${Number(b.amount).toLocaleString("th-TH")} บาท`
         : "";
-      lines.push(`  • ${b.name}${amtStr} — ${dueStr}`);
+
+      lines.push(`• ${b.name}${amtStr} (${dueStr})`);
     }
   }
 
-  // Yesterday spend
-  if (yesterdayTotal > 0) {
+  if (hasSpending) {
     lines.push("");
     lines.push(
       language === "th"
-        ? `📊 รายจ่ายเมื่อวาน: ${yesterdayTotal.toLocaleString("th-TH")} บาท`
-        : `📊 Yesterday's spending: ${yesterdayTotal.toLocaleString("th-TH")} THB`
+        ? `💸 รายจ่ายเมื่อวาน: ${yesterdayTotal.toLocaleString("th-TH")} บาท`
+        : `💸 Yesterday's spending: ${yesterdayTotal.toLocaleString(
+            "th-TH"
+          )} THB`
     );
   }
 
   lines.push("");
   lines.push(
     language === "th"
-      ? "มีอะไรเพิ่มเติมบอก Kuro ได้เลยนะ 🖤"
-      : "Just chat if you need anything 🖤"
+      ? "ผมจะช่วยจำและจัดการให้ครับ 🐾"
+      : "I’ll help you stay organized 🐾"
   );
 
   return lines.join("\n");
