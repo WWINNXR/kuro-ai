@@ -1,3 +1,4 @@
+import { Reply } from "../replies";
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
 import { KURO_PERSONALITY } from "../personality";
