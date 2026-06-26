@@ -17,6 +17,10 @@ import {
   handleQuerySpending,
 } from "@/lib/handlers/expenses";
 import { buildDailySummary } from "@/lib/handlers/summary";
+import {
+  handleSaveMemory,
+  handleQueryMemory,
+} from "@/lib/handlers/memory";
 
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
@@ -106,6 +110,14 @@ async function handleEvent(event: line.WebhookEvent) {
         replyText = await buildDailySummary(user.id, parsed.language);
         break;
 
+      case "save_memory":
+        replyText = await handleSaveMemory(user.id, parsed);
+        break;
+
+      case "query_memory":
+        replyText = await handleQueryMemory(user.id, parsed);
+        break;
+
       default:
         replyText =
           parsed.language === "th"
@@ -118,7 +130,8 @@ async function handleEvent(event: line.WebhookEvent) {
 📌 เตือนประชุมพรุ่งนี้ 10 โมง
 💸 กาแฟ 120
 📅 วันนี้มีนัดอะไรบ้าง
-💳 เดือนนี้ต้องจ่ายอะไรบ้าง`
+💳 เดือนนี้ต้องจ่ายอะไรบ้าง
+🧠 จำไว้ว่าเราชอบอเมริกาโน่`
             : `Sorry 🐾
 
 I'm not quite sure what you mean.
@@ -128,7 +141,8 @@ Try one of these:
 📌 Remind me about the meeting tomorrow at 10am
 💸 Coffee 120
 📅 What do I have today?
-💳 What bills are due this month?`;
+💳 What bills are due this month?
+🧠 Remember that I like Americano`;
     }
 
     await lineClient.replyMessage({

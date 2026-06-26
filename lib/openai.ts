@@ -18,26 +18,45 @@ export type Intent =
   | "query_spending"
   | "query_summary"
   | "set_briefing_time"
+  | "save_memory"
+  | "query_memory"
   | "unknown";
 
 export interface ParsedMessage {
   intent: Intent;
-  subject?: string;       // reminder subject, event title, bill name, expense description
-  datetime?: string;      // ISO 8601 string for event/reminder time
-  rrule?: string;         // recurring rule e.g. "FREQ=MONTHLY;BYMONTHDAY=28"
-  amount?: number;        // expense/bill amount
-  due_date?: string;      // bill due date YYYY-MM-DD
-  due_day?: number;       // bill due day of month (1-31)
-  recurrence?: "once" | "monthly" | "yearly";
-  direction?: "expense" | "income";
-  period?: "today" | "yesterday" | "week" | "month"; // for queries
+  subject?: string | null;
+  datetime?: string | null;
+  rrule?: string | null;
+  amount?: number | null;
+  due_date?: string | null;
+  due_day?: number | null;
+  recurrence?: "once" | "monthly" | "yearly" | null;
+  direction?: "expense" | "income" | null;
+  period?: "today" | "yesterday" | "week" | "month" | null;
+
+  // Memory fields
+  memory_category?:
+    | "profile"
+    | "preference"
+    | "habit"
+    | "relationship"
+    | "goal"
+    | "work"
+    | "budget"
+    | "location"
+    | "other"
+    | null;
+  memory_key?: string | null;
+  memory_value?: string | null;
+
   language: "th" | "en";
-  confidence: number;     // 0-1
+  confidence: number;
 }
 
 // ── System prompt ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are Kuro AI, a personal LINE chatbot assistant for Thai users.
+
 Your job is to parse user messages and return structured JSON — nothing else.
 
 Today's date and time in Bangkok (UTC+7): {{NOW}}
@@ -45,15 +64,18 @@ Today's date and time in Bangkok (UTC+7): {{NOW}}
 Return ONLY valid JSON matching this exact structure:
 {
   "intent": "<one of the intents below>",
-  "subject": "<event title / reminder text / expense description / bill name>",
-  "datetime": "<ISO 8601 full datetime in Bangkok time e.g. 2025-06-26T10:00:00+07:00 — only for events and reminders>",
+  "subject": "<event title / reminder text / expense description / bill name / memory text>",
+  "datetime": "<ISO 8601 full datetime in Bangkok time e.g. 2026-06-26T10:00:00+07:00 — only for events and reminders>",
   "rrule": "<RRULE string for recurring e.g. FREQ=MONTHLY;BYMONTHDAY=28 — null if one-time>",
   "amount": <number or null>,
   "due_date": "<YYYY-MM-DD for one-time bill due date>",
   "due_day": <1-31 for monthly recurring bill day, null otherwise>,
-  "recurrence": "once|monthly|yearly",
-  "direction": "expense|income",
-  "period": "today|yesterday|week|month",
+  "recurrence": "once|monthly|yearly|null",
+  "direction": "expense|income|null",
+  "period": "today|yesterday|week|month|null",
+  "memory_category": "profile|preference|habit|relationship|goal|work|budget|location|other|null",
+  "memory_key": "<short key for memory, e.g. nickname, favorite_coffee, monthly_budget, office, wake_time>",
+  "memory_value": "<value to save or query, e.g. Win, Americano, 25000, CPF>",
   "language": "th|en",
   "confidence": <0.0-1.0>
 }
@@ -65,12 +87,26 @@ Valid intents:
 - create_bill       → user logs a recurring or one-time bill (ค่าไฟ, Netflix ทุกวันที่ 15)
 - query_bills       → user asks about bills due (ต้องจ่ายอะไร, what bills)
 - mark_bill_paid    → user says they paid a bill (จ่ายแล้ว, paid)
-- log_expense       → user logs a spending (กาแฟ 120, spent 50 on lunch)
+- log_expense       → user logs spending (กาแฟ 120, spent 50 on lunch)
 - log_income        → user logs income (รับเงิน, เงินเดือนเข้า, income)
 - query_spending    → user asks how much spent (ใช้เงินเท่าไหร่, how much this month)
-- query_summary     → user asks for a daily overview (สรุปวันนี้, what do I have today)
+- query_summary     → user asks for a daily overview (สรุปวันนี้, วันนี้มีอะไรบ้าง, what do I have today)
 - set_briefing_time → user wants to change morning summary time
-- unknown           → cannot determine intent (confidence < 0.6)
+- save_memory       → user tells Kuro to remember personal information
+- query_memory      → user asks about remembered personal information
+- unknown           → cannot determine intent
+
+Memory examples:
+- "เรียกเราว่าวิน" → save_memory, memory_category="profile", memory_key="nickname", memory_value="วิน"
+- "จำไว้ว่าเราชอบอเมริกาโน่" → save_memory, memory_category="preference", memory_key="favorite_coffee", memory_value="อเมริกาโน่"
+- "เราทำงานที่ CPF" → save_memory, memory_category="work", memory_key="office", memory_value="CPF"
+- "งบเดือนละ 25000" → save_memory, memory_category="budget", memory_key="monthly_budget", memory_value="25000", amount=25000
+- "ปกติตื่น 7 โมง" → save_memory, memory_category="habit", memory_key="wake_time", memory_value="07:00"
+- "บ้านเราอยู่พระประแดง" → save_memory, memory_category="location", memory_key="home_location", memory_value="พระประแดง"
+- "เราชื่ออะไร" → query_memory, memory_category="profile", memory_key="nickname"
+- "เราชอบกาแฟอะไร" → query_memory, memory_category="preference", memory_key="favorite_coffee"
+- "งบเราต่อเดือนเท่าไหร่" → query_memory, memory_category="budget", memory_key="monthly_budget"
+- "เราทำงานที่ไหน" → query_memory, memory_category="work", memory_key="office"
 
 Rules:
 - Detect language from the message. Thai = "th", English = "en".
@@ -78,8 +114,11 @@ Rules:
 - For times: บ่ายสอง=14:00, สิบโมง=10:00, เที่ยง=12:00, ทุ่มครึ่ง=19:30
 - Short expense messages like "กาแฟ 120" = log_expense with subject=กาแฟ amount=120
 - If only an amount and item are given with no time, it is an expense, not a reminder.
+- If user says "จำไว้ว่า...", "เรียกเราว่า...", "เราชอบ...", "ปกติเรา...", classify as save_memory.
+- If user asks "จำได้ไหมว่า...", "เราชื่ออะไร", "เราชอบอะไร", "งบเราเท่าไหร่", classify as query_memory.
 - Return null for unused fields, never omit keys.
-- Always set confidence honestly. Unknown intent = confidence < 0.6.`;
+- Always set confidence honestly.
+- Unknown intent = confidence < 0.6.`;
 
 // ── Parse function ────────────────────────────────────────────────────────────
 
@@ -90,23 +129,53 @@ export async function parseMessage(
   const prompt = SYSTEM_PROMPT.replace("{{NOW}}", nowBangkok);
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",          // fast + cheap for classification
+    model: "gpt-4o-mini",
     messages: [
       { role: "system", content: prompt },
       { role: "user", content: text },
     ],
     response_format: { type: "json_object" },
     temperature: 0,
-    max_tokens: 400,
+    max_tokens: 500,
   });
 
   const raw = response.choices[0].message.content ?? "{}";
 
   try {
-    return JSON.parse(raw) as ParsedMessage;
+    const parsed = JSON.parse(raw) as ParsedMessage;
+
+    return {
+      intent: parsed.intent ?? "unknown",
+      subject: parsed.subject ?? null,
+      datetime: parsed.datetime ?? null,
+      rrule: parsed.rrule ?? null,
+      amount: parsed.amount ?? null,
+      due_date: parsed.due_date ?? null,
+      due_day: parsed.due_day ?? null,
+      recurrence: parsed.recurrence ?? null,
+      direction: parsed.direction ?? null,
+      period: parsed.period ?? null,
+      memory_category: parsed.memory_category ?? null,
+      memory_key: parsed.memory_key ?? null,
+      memory_value: parsed.memory_value ?? null,
+      language: parsed.language ?? "th",
+      confidence: parsed.confidence ?? 0,
+    };
   } catch {
     return {
       intent: "unknown",
+      subject: null,
+      datetime: null,
+      rrule: null,
+      amount: null,
+      due_date: null,
+      due_day: null,
+      recurrence: null,
+      direction: null,
+      period: null,
+      memory_category: null,
+      memory_key: null,
+      memory_value: null,
       language: "th",
       confidence: 0,
     };
