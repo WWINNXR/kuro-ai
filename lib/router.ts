@@ -28,6 +28,13 @@ import {
   handleQueryMemory,
 } from "./handlers/memory";
 
+import {
+  handleSavePreference,
+  handleQueryPreference,
+  handleMoodCheck,
+  handleCasualChat,
+} from "./handlers/natural";
+
 function displayName(context?: KuroContext): string {
   return context?.profile?.nickname ?? "คุณ";
 }
@@ -88,6 +95,18 @@ export async function routeIntent(
     case "query_memory":
       return await handleQueryMemory(userId, parsed);
 
+    case "save_preference":
+      return await handleSavePreference(userId, parsed);
+
+    case "query_preference":
+      return await handleQueryPreference(userId, parsed);
+
+    case "mood_check":
+      return await handleMoodCheck(userId, parsed);
+
+    case "casual_chat":
+      return await handleCasualChat(userId, parsed);
+
     default:
       return parsed.language === "th"
         ? `ขออภัยครับ ${name} 🐾
@@ -100,7 +119,9 @@ export async function routeIntent(
 💸 กาแฟ 120
 📅 วันนี้มีนัดอะไร
 💳 เดือนนี้ต้องจ่ายอะไร
-🧠 จำไว้ว่าผมชื่อวิน`
+🧠 จำไว้ว่าผมชื่อวิน
+🍹 น้ำร้านนี้อร่อย
+😮‍💨 วันนี้เหนื่อยมาก`
         : `Sorry ${name} 🐾
 
 I'm not sure what you mean.
@@ -111,6 +132,8 @@ Try:
 💸 Coffee 120
 📅 What do I have today?
 💳 What bills are due?
-🧠 Remember my name is Win`;
+🧠 Remember my name is Win
+🍹 This drink is good
+😮‍💨 I'm tired today`;
   }
 }
