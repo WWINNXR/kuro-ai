@@ -1,4 +1,4 @@
-import { Reply } from "./replies";
+import { Reply } from "../replies";
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
 import { KURO_PERSONALITY } from "../personality";
@@ -14,6 +14,7 @@ export async function handleReminder(
   }
 
   const remindAt = new Date(parsed.datetime);
+
   if (isNaN(remindAt.getTime())) {
     return parsed.language === "th"
       ? "ผมยังอ่านเวลาไม่ออกครับ 🐾\nลองพิมพ์แบบนี้: เตือนประชุมพรุ่งนี้ 10 โมง"
@@ -50,11 +51,11 @@ export async function handleReminder(
     : "";
 
   return parsed.language === "th"
-  ? Reply.reminderCreated(
-      parsed.subject,
-      `${dateStr} เวลา ${timeStr}${recurring}`
-    )
-  : `Saved ✓
+    ? Reply.reminderCreated(
+        parsed.subject,
+        `${dateStr} เวลา ${timeStr}${recurring}`
+      )
+    : `Saved ✓
 Reminder: ${parsed.subject}
 ${dateStr} at ${timeStr}${recurring}`;
 }
