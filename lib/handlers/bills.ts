@@ -71,12 +71,17 @@ export async function handleQueryBills(
   parsed: ParsedMessage
 ): Promise<string> {
   const now = new Date();
+  const todayStr = toDateOnly(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
     .slice(0, 10);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0)
     .toISOString()
     .slice(0, 10);
+
+  const sevenDaysLater = new Date(now);
+  sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+  const sevenDaysLaterStr = toDateOnly(sevenDaysLater);
 
   const { data, error } = await supabase
     .from("bills")
@@ -94,29 +99,69 @@ export async function handleQueryBills(
       : "No bills found this month 🐾";
   }
 
-  const lines = data.map((b) => {
-    const status = b.status === "paid" ? "✅" : "⏳";
-    const amount = b.amount ? ` — ${b.amount.toLocaleString("th-TH")} บาท` : "";
-    return `${status} ${b.name}${amount}\n📅 ${formatDate(b.next_due_at)}`;
-  });
+  const unpaidBills = data.filter((b) => b.status !== "paid");
+  const dueSoonBills = unpaidBills.filter(
+    (b) => b.next_due_at >= todayStr && b.next_due_at <= sevenDaysLaterStr
+  );
 
-  const unpaidTotal = data
-    .filter((b) => b.status !== "paid" && b.amount)
+  const unpaidTotal = unpaidBills
+    .filter((b) => b.amount)
     .reduce((sum, b) => sum + Number(b.amount), 0);
 
-  const header =
-    parsed.language === "th"
-      ? `📋 บิลเดือนนี้\n\n`
-      : `📋 This month's bills\n\n`;
+  const lines = data.map((b) => {
+    const status = b.status === "paid" ? "✅ จ่ายแล้ว" : "⏳ ยังไม่จ่าย";
+    const amount = b.amount ? ` — ${b.amount.toLocaleString("th-TH")} บาท` : "";
+    const dueNote = getDueNote(b.next_due_at, parsed.language);
+    return `${status}
+💳 ${b.name}${amount}
+📅 ${formatDate(b.next_due_at)}${dueNote ? ` (${dueNote})` : ""}`;
+  });
 
-  const footer =
-    unpaidTotal > 0
-      ? parsed.language === "th"
-        ? `\n\nรวมที่ยังไม่ได้จ่าย: ${unpaidTotal.toLocaleString("th-TH")} บาท`
-        : `\n\nTotal unpaid: ${unpaidTotal.toLocaleString("th-TH")} THB`
-      : "";
+  if (parsed.language === "th") {
+    let reply = `📋 บิลเดือนนี้
 
-  return header + lines.join("\n\n") + footer;
+ทั้งหมด ${data.length} รายการ
+ค้างชำระ ${unpaidBills.length} รายการ`;
+
+    if (unpaidTotal > 0) {
+      reply += `
+รวมยอดค้างชำระ ${unpaidTotal.toLocaleString("th-TH")} บาท`;
+    }
+
+    if (dueSoonBills.length > 0) {
+      reply += `
+
+⚠️ ใกล้ครบกำหนดใน 7 วัน: ${dueSoonBills.length} รายการ`;
+    }
+
+    reply += `
+
+${lines.join("\n\n")}`;
+
+    return reply;
+  }
+
+  let reply = `📋 This month's bills
+
+Total: ${data.length}
+Unpaid: ${unpaidBills.length}`;
+
+  if (unpaidTotal > 0) {
+    reply += `
+Total unpaid: ${unpaidTotal.toLocaleString("th-TH")} THB`;
+  }
+
+  if (dueSoonBills.length > 0) {
+    reply += `
+
+⚠️ Due within 7 days: ${dueSoonBills.length}`;
+  }
+
+  reply += `
+
+${lines.join("\n\n")}`;
+
+  return reply;
 }
 
 // ── Mark bill paid ────────────────────────────────────────────────────────────
@@ -216,4 +261,27 @@ function formatDate(dateStr: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function toDateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function getDueNote(dateStr: string, language: "th" | "en"): string {
+  const today = new Date(toDateOnly(new Date()));
+  const due = new Date(dateStr);
+  const diffDays = Math.ceil(
+    (due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  if (diffDays === 0) return language === "th" ? "ครบกำหนดวันนี้" : "due today";
+  if (diffDays === 1) return language === "th" ? "พรุ่งนี้" : "tomorrow";
+  if (diffDays > 1 && diffDays <= 7)
+    return language === "th" ? `อีก ${diffDays} วัน` : `in ${diffDays} days`;
+  if (diffDays < 0)
+    return language === "th"
+      ? `เกินกำหนด ${Math.abs(diffDays)} วัน`
+      : `${Math.abs(diffDays)} days overdue`;
+
+  return "";
 }
