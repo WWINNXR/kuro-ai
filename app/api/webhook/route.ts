@@ -18,8 +18,6 @@ import {
 } from "@/lib/handlers/expenses";
 import { buildDailySummary } from "@/lib/handlers/summary";
 
-// ── LINE client setup ─────────────────────────────────────────────────────────
-
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
   channelSecret: process.env.LINE_CHANNEL_SECRET!,
@@ -27,30 +25,22 @@ const lineConfig = {
 
 const lineClient = new line.messagingApi.MessagingApiClient(lineConfig);
 
-// ── Webhook POST handler ──────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
-  // Read raw body for signature validation
   const rawBody = await req.text();
   const signature = req.headers.get("x-line-signature") ?? "";
 
-  // Validate LINE signature
   if (!line.validateSignature(rawBody, lineConfig.channelSecret, signature)) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
   }
 
   const body = JSON.parse(rawBody) as line.WebhookRequestBody;
 
-  // Process events — don't await in production to avoid timeout, but fine for MVP
   await Promise.all(body.events.map(handleEvent));
 
   return NextResponse.json({ ok: true });
 }
 
-// ── Event router ──────────────────────────────────────────────────────────────
-
 async function handleEvent(event: line.WebhookEvent) {
-  // Only handle text messages for MVP
   if (event.type !== "message" || event.message.type !== "text") return;
   if (!event.source.userId) return;
 
@@ -59,10 +49,8 @@ async function handleEvent(event: line.WebhookEvent) {
   const replyToken = event.replyToken;
 
   try {
-    // Get or create user
     const user = await getOrCreateUser(lineUserId);
 
-    // Get Bangkok time string for AI context
     const nowBangkok = new Date().toLocaleString("en-CA", {
       timeZone: "Asia/Bangkok",
       year: "numeric",
@@ -73,10 +61,8 @@ async function handleEvent(event: line.WebhookEvent) {
       hour12: false,
     });
 
-    // Parse intent with OpenAI
     const parsed = await parseMessage(text, nowBangkok);
 
-    // Route to handler
     let replyText = "";
 
     switch (parsed.intent) {
@@ -123,28 +109,46 @@ async function handleEvent(event: line.WebhookEvent) {
       default:
         replyText =
           parsed.language === "th"
-            ? "ขอโทษนะ 🐾 ไม่เข้าใจที่พูด ลองพูดใหม่ได้เลย\nเช่น:\n• เตือนประชุม 10 โมงพรุ่งนี้\n• กาแฟ 120\n• เดือนนี้ใช้เงินเท่าไหร่"
-            : "Sorry 🐾 I didn't understand that. Try:\n• Remind me about the meeting tomorrow at 10am\n• Coffee 120\n• How much did I spend this month?";
+            ? `ขออภัยครับ 🐾
+
+ผมยังไม่แน่ใจว่าคุณต้องการให้ช่วยเรื่องอะไร
+
+ลองพิมพ์ตัวอย่างแบบนี้ได้เลย
+
+📌 เตือนประชุมพรุ่งนี้ 10 โมง
+💸 กาแฟ 120
+📅 วันนี้มีนัดอะไรบ้าง
+💳 เดือนนี้ต้องจ่ายอะไรบ้าง`
+            : `Sorry 🐾
+
+I'm not quite sure what you mean.
+
+Try one of these:
+
+📌 Remind me about the meeting tomorrow at 10am
+💸 Coffee 120
+📅 What do I have today?
+💳 What bills are due this month?`;
     }
 
-    // Send reply
     await lineClient.replyMessage({
       replyToken,
       messages: [{ type: "text", text: replyText }],
     });
   } catch (err) {
     console.error("Webhook error:", err);
-    // Send a graceful error message so user isn't left hanging
+
     await lineClient
       .replyMessage({
         replyToken,
         messages: [
           {
             type: "text",
-            text: "มีปัญหาบางอย่างเกิดขึ้น 🐾 ลองใหม่อีกครั้งนะ",
+            text:
+              "ขออภัยครับ 🐾\n\nเกิดข้อผิดพลาดระหว่างประมวลผล\n\nลองส่งข้อความอีกครั้งได้เลยครับ",
           },
         ],
       })
-      .catch(() => {}); // Swallow secondary errors
+      .catch(() => {});
   }
 }
