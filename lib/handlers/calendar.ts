@@ -9,15 +9,16 @@ export async function handleCreateEvent(
 ): Promise<string> {
   if (!parsed.subject || !parsed.datetime) {
     return parsed.language === "th"
-      ? "ช่วยบอกชื่อนัดและเวลาด้วยนะ เช่น 'เพิ่มนัดประชุมพรุ่งนี้ 10 โมง'"
-      : "Please include the event name and time, e.g. 'add meeting tomorrow at 10am'";
+      ? "ขอรายละเอียดนัดเพิ่มนิดนึงครับ 🐾\nอยากเพิ่มนัดอะไร และเวลาไหน?"
+      : "Please include the event name and time, e.g. add meeting tomorrow at 10am";
   }
 
   const startAt = new Date(parsed.datetime);
+
   if (isNaN(startAt.getTime())) {
     return parsed.language === "th"
-      ? "ไม่เข้าใจเวลาที่ระบุ ลองอีกครั้งนะ"
-      : "I couldn't understand that time. Please try again.";
+      ? "ผมยังอ่านเวลาไม่ออกครับ 🐾\nลองพิมพ์แบบนี้: เพิ่มนัดประชุมพรุ่งนี้ 10 โมง"
+      : "I couldn't understand the time. Try: add meeting tomorrow at 10am";
   }
 
   const { error } = await supabase.from("events").insert({
@@ -34,6 +35,7 @@ export async function handleCreateEvent(
     day: "numeric",
     month: "long",
   });
+
   const timeStr = startAt.toLocaleTimeString("th-TH", {
     timeZone: "Asia/Bangkok",
     hour: "2-digit",
@@ -41,8 +43,18 @@ export async function handleCreateEvent(
   });
 
   return parsed.language === "th"
-    ? `บันทึกนัดแล้ว ✓\n📅 ${parsed.subject}\n${dateStr} เวลา ${timeStr}`
-    : `Event saved ✓\n📅 ${parsed.subject}\n${dateStr} at ${timeStr}`;
+    ? `รับทราบครับ 🐾
+
+ผมบันทึกนัดหมายเรียบร้อยแล้ว
+
+📅 นัด: ${parsed.subject}
+🕒 เวลา: ${dateStr} ${timeStr}`
+    : `Saved 🐾
+
+Event created
+
+📅 Event: ${parsed.subject}
+🕒 Time: ${dateStr} ${timeStr}`;
 }
 
 // ── Query events ─────────────────────────────────────────────────────────────
@@ -54,7 +66,6 @@ export async function handleQueryEvents(
   const now = new Date();
   const TZ = "Asia/Bangkok";
 
-  // Determine range based on period
   let rangeStart: Date;
   let rangeEnd: Date;
   let label: string;
@@ -66,7 +77,6 @@ export async function handleQueryEvents(
     rangeEnd = new Date(rangeStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     label = parsed.language === "th" ? "7 วันข้างหน้า" : "next 7 days";
   } else {
-    // Default: today
     rangeStart = startOfDayBangkok(now);
     rangeEnd = endOfDayBangkok(now);
     label = parsed.language === "th" ? "วันนี้" : "today";
@@ -84,7 +94,7 @@ export async function handleQueryEvents(
 
   if (!data || data.length === 0) {
     return parsed.language === "th"
-      ? `ไม่มีนัดหมาย${label}เลย 🐾`
+      ? `ยังไม่มีนัดหมาย${label}ครับ 🐾`
       : `No events ${label} 🐾`;
   }
 
@@ -94,13 +104,22 @@ export async function handleQueryEvents(
       hour: "2-digit",
       minute: "2-digit",
     });
-    return `• ${t} — ${e.title}`;
+
+    return `🕒 ${t} — ${e.title}`;
   });
 
   const header =
     parsed.language === "th"
-      ? `📅 นัดหมาย${label} (${data.length} รายการ)\n`
-      : `📅 Events ${label} (${data.length} items)\n`;
+      ? `📅 นัดหมาย${label}
+
+วันนี้คุณมี ${data.length} รายการ
+
+`
+      : `📅 Events ${label}
+
+You have ${data.length} item(s)
+
+`;
 
   return header + lines.join("\n");
 }
@@ -108,15 +127,15 @@ export async function handleQueryEvents(
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function startOfDayBangkok(date: Date): Date {
-  const d = new Date(
-    date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) + "T00:00:00+07:00"
+  return new Date(
+    date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) +
+      "T00:00:00+07:00"
   );
-  return d;
 }
 
 function endOfDayBangkok(date: Date): Date {
-  const d = new Date(
-    date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) + "T23:59:59+07:00"
+  return new Date(
+    date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" }) +
+      "T23:59:59+07:00"
   );
-  return d;
 }
