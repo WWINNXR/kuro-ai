@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
+import { KURO_PERSONALITY } from "../personality";
 
 export async function handleReminder(
   userId: string,
@@ -7,15 +8,15 @@ export async function handleReminder(
 ): Promise<string> {
   if (!parsed.subject || !parsed.datetime) {
     return parsed.language === "th"
-      ? "ขอโทษนะ 🐾 ช่วยบอกด้วยว่าจะเตือนเรื่องอะไร และเมื่อไหร่?"
-      : "Sorry 🐾 could you tell me what to remind you about and when?";
+      ? "ขอรายละเอียดเพิ่มนิดนึงครับ 🐾\nอยากให้เตือนเรื่องอะไร และเวลาไหน?"
+      : "Could you tell me what to remind you about and when?";
   }
 
   const remindAt = new Date(parsed.datetime);
   if (isNaN(remindAt.getTime())) {
     return parsed.language === "th"
-      ? "ไม่เข้าใจเวลาที่ระบุ ลองใหม่อีกครั้งนะ เช่น 'เตือนประชุมพรุ่งนี้ 10 โมง'"
-      : "I couldn't understand that time. Try again, e.g. 'remind me about the meeting tomorrow at 10am'";
+      ? "ผมยังอ่านเวลาไม่ออกครับ 🐾\nลองพิมพ์แบบนี้: เตือนประชุมพรุ่งนี้ 10 โมง"
+      : "I couldn't understand the time. Try: remind me about the meeting tomorrow at 10am";
   }
 
   const { error } = await supabase.from("reminders").insert({
@@ -28,13 +29,13 @@ export async function handleReminder(
 
   if (error) throw error;
 
-  // Format confirmation
   const dateStr = remindAt.toLocaleDateString("th-TH", {
     timeZone: "Asia/Bangkok",
     weekday: "short",
     day: "numeric",
     month: "short",
   });
+
   const timeStr = remindAt.toLocaleTimeString("th-TH", {
     timeZone: "Asia/Bangkok",
     hour: "2-digit",
@@ -43,11 +44,21 @@ export async function handleReminder(
 
   const recurring = parsed.rrule
     ? parsed.language === "th"
-      ? " (ทุกเดือน)"
-      : " (monthly)"
+      ? "\n🔁 เตือนซ้ำตามรอบที่กำหนด"
+      : "\n🔁 Recurring reminder enabled"
     : "";
 
   return parsed.language === "th"
-    ? `บันทึกแล้ว ✓\nจะเตือนเรื่อง: ${parsed.subject}\n${dateStr} เวลา ${timeStr}${recurring}`
-    : `Saved ✓\nReminder: ${parsed.subject}\n${dateStr} at ${timeStr}${recurring}`;
+    ? `${KURO_PERSONALITY.confirm[0]}
+
+ผมบันทึกการเตือนเรียบร้อยแล้ว
+
+📌 เรื่อง: ${parsed.subject}
+🕒 เวลา: ${dateStr} ${timeStr}${recurring}`
+    : `Saved 🐾
+
+Reminder created
+
+📌 Subject: ${parsed.subject}
+🕒 Time: ${dateStr} ${timeStr}${recurring}`;
 }
