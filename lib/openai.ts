@@ -52,7 +52,7 @@ export interface ParsedMessage {
     | null;
   memory_key?: string | null;
   memory_value?: string | null;
-  
+
   // Natural conversation fields
   preference_category?:
     | "food"
@@ -72,6 +72,19 @@ export interface ParsedMessage {
     | "bored"
     | "neutral"
     | null;
+
+  // Kuro v2 fields
+  domain?:
+    | "task"
+    | "finance"
+    | "memory"
+    | "conversation"
+    | "reasoning"
+    | "unknown"
+    | null;
+  action?: string | null;
+  entities?: Record<string, unknown> | null;
+  reply_hint?: string | null;
 
   language: "th" | "en";
   confidence: number;
@@ -104,6 +117,10 @@ Return ONLY valid JSON matching this exact structure:
   "preference_value": "<preference value such as ร้านนี้, Koi, อเมริกาโน่>",
   "preference_sentiment": "like|dislike|neutral|null",
   "mood": "happy|tired|stressed|sad|bored|neutral|null",
+  "domain": "task|finance|memory|conversation|reasoning|unknown|null",
+  "action": "<specific action such as save_preference, log_expense, create_reminder>",
+  "entities": {},
+  "reply_hint": "<short instruction for how Kuro should reply naturally>",
   "language": "th|en",
   "confidence": <0.0-1.0>
 }
@@ -155,6 +172,17 @@ Rules:
 - If user asks "เราชอบร้านไหน", "ร้านไหนที่ไม่ชอบ", classify as query_preference.
 - If user says they are tired, stressed, sad, bored, classify as mood_check.
 - If user says casual phrases without clear task, classify as casual_chat.
+
+Kuro v2 routing:
+- domain="task" for reminders, events, bills, schedules.
+- domain="finance" for expenses, income, budgets, spending summaries.
+- domain="memory" for user profile, preferences, likes, dislikes, habits.
+- domain="conversation" for casual chat, mood, emotional support.
+- domain="reasoning" for insights, analysis, recommendations.
+- Keep legacy intent for backward compatibility.
+- Always fill action with the specific action, e.g. save_preference, log_expense, create_reminder.
+- Use reply_hint to describe how Kuro should respond naturally.
+
 - Return null for unused fields, never omit keys.
 - Always set confidence honestly.
 - Unknown intent = confidence < 0.6.`;
@@ -175,7 +203,7 @@ export async function parseMessage(
     ],
     response_format: { type: "json_object" },
     temperature: 0,
-    max_tokens: 500,
+    max_tokens: 650,
   });
 
   const raw = response.choices[0].message.content ?? "{}";
@@ -194,13 +222,21 @@ export async function parseMessage(
       recurrence: parsed.recurrence ?? null,
       direction: parsed.direction ?? null,
       period: parsed.period ?? null,
+
       memory_category: parsed.memory_category ?? null,
       memory_key: parsed.memory_key ?? null,
       memory_value: parsed.memory_value ?? null,
+
       preference_category: parsed.preference_category ?? null,
       preference_value: parsed.preference_value ?? null,
       preference_sentiment: parsed.preference_sentiment ?? null,
       mood: parsed.mood ?? null,
+
+      domain: parsed.domain ?? null,
+      action: parsed.action ?? null,
+      entities: parsed.entities ?? null,
+      reply_hint: parsed.reply_hint ?? null,
+
       language: parsed.language ?? "th",
       confidence: parsed.confidence ?? 0,
     };
@@ -216,13 +252,21 @@ export async function parseMessage(
       recurrence: null,
       direction: null,
       period: null,
+
       memory_category: null,
       memory_key: null,
       memory_value: null,
+
       preference_category: null,
       preference_value: null,
       preference_sentiment: null,
       mood: null,
+
+      domain: null,
+      action: null,
+      entities: null,
+      reply_hint: null,
+
       language: "th",
       confidence: 0,
     };

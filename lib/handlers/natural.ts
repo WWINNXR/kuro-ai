@@ -1,5 +1,7 @@
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
+import { buildContext } from "../context";
+import { generateReply } from "../reply-engine";
 
 export async function handleSavePreference(
   userId: string,
@@ -25,31 +27,14 @@ export async function handleSavePreference(
 
   if (error) throw error;
 
-  if (parsed.language === "th") {
-    if (sentiment === "like") {
-      return `จำไว้ให้แล้วครับ 🐾
+  const context = await buildContext(userId);
 
-คุณชอบ ${value}
-
-ครั้งหน้าถ้าเกี่ยวกับเรื่องนี้ ผมจะจำไว้เป็นตัวเลือกที่ดีครับ`;
-    }
-
-    if (sentiment === "dislike") {
-      return `โอเคครับ 🐾
-
-ผมจะจำไว้ว่า ${value} ไม่ใช่ตัวเลือกที่คุณอยากได้
-
-ครั้งหน้าผมจะพยายามหลีกเลี่ยงให้ครับ`;
-    }
-
-    return `จำไว้ให้แล้วครับ 🐾
-
-${value}`;
-  }
-
-  return `Saved to preference memory 🐾
-
-${value}`;
+  return generateReply({
+    parsed,
+    context,
+    result: `Saved preference: category=${category}, value=${value}, sentiment=${sentiment}`,
+    userMessage: parsed.subject ?? value,
+  });
 }
 
 export async function handleQueryPreference(
@@ -79,32 +64,16 @@ export async function handleQueryPreference(
       : "I don't have preference memory about that yet 🐾";
   }
 
-  const likes = data.filter((p) => p.sentiment === "like");
-  const dislikes = data.filter((p) => p.sentiment === "dislike");
+  const context = await buildContext(userId);
 
-  if (parsed.language === "th") {
-    let reply = "ผมจำความชอบของคุณไว้ประมาณนี้ครับ 🐾";
-
-    if (likes.length > 0) {
-      reply += `
-
-ชอบ:
-${likes.map((p) => `• ${p.value}`).join("\n")}`;
-    }
-
-    if (dislikes.length > 0) {
-      reply += `
-
-ไม่ค่อยชอบ / อยากเลี่ยง:
-${dislikes.map((p) => `• ${p.value}`).join("\n")}`;
-    }
-
-    return reply;
-  }
-
-  return `Here’s what I remember 🐾
-
-${data.map((p) => `• ${p.sentiment}: ${p.value}`).join("\n")}`;
+  return generateReply({
+    parsed,
+    context,
+    result: `User preferences:\n${data
+      .map((p) => `- ${p.category}: ${p.value} (${p.sentiment})`)
+      .join("\n")}`,
+    userMessage: parsed.subject ?? "query preference",
+  });
 }
 
 export async function handleMoodCheck(
@@ -122,66 +91,26 @@ export async function handleMoodCheck(
 
   if (error) throw error;
 
-  if (parsed.language === "th") {
-    if (mood === "tired") {
-      return `เหนื่อยใช่ไหมครับ 🐾
+  const context = await buildContext(userId);
 
-ผมรับรู้ไว้แล้วนะ
-
-วันนี้ลองพักสั้น ๆ สัก 10 นาที แล้วค่อยกลับมาจัดการต่อก็ได้ครับ`;
-    }
-
-    if (mood === "stressed") {
-      return `เข้าใจครับ 🐾
-
-วันนี้ดูเหมือนจะมีเรื่องกดดันอยู่
-
-ถ้าต้องการ ผมช่วยจัดลำดับสิ่งที่ต้องทำให้เบาลงได้ครับ`;
-    }
-
-    if (mood === "sad") {
-      return `ผมอยู่ตรงนี้นะครับ 🐾
-
-ถ้าอยากคุยเล่นหรือระบายอะไร พิมพ์มาได้เลย`;
-    }
-
-    if (mood === "bored") {
-      return `เบื่อนิด ๆ ใช่ไหมครับ 🐾
-
-จะให้ผมช่วยหาอะไรทำ หรือคุยเล่นเป็นเพื่อนก็ได้นะ`;
-    }
-
-    if (mood === "happy") {
-      return `ดีใจด้วยครับ 🐾
-
-ผมบันทึกโมเมนต์ดี ๆ นี้ไว้ให้แล้ว`;
-    }
-
-    return `รับรู้ไว้แล้วครับ 🐾`;
-  }
-
-  return `I hear you 🐾`;
+  return generateReply({
+    parsed,
+    context,
+    result: `Saved mood log: mood=${mood}, note=${note ?? ""}`,
+    userMessage: parsed.subject ?? mood,
+  });
 }
 
 export async function handleCasualChat(
   userId: string,
   parsed: ParsedMessage
 ): Promise<string> {
-  const text = parsed.subject ?? "";
+  const context = await buildContext(userId);
 
-  if (parsed.language === "th") {
-    if (text.includes("สวัสดี") || text.includes("หวัดดี")) {
-      return `สวัสดีครับ 🐾
-
-ผมอยู่ตรงนี้แล้ว มีอะไรให้ช่วยหรืออยากคุยเล่นก็บอกได้เลย`;
-    }
-
-    return `คุยได้เลยครับ 🐾
-
-วันนี้อยากให้ผมช่วยอะไร หรืออยากเล่าอะไรให้ฟังก็ได้`;
-  }
-
-  return `I'm here 🐾
-
-You can chat with me anytime.`;
+  return generateReply({
+    parsed,
+    context,
+    result: "Casual conversation. No database action required.",
+    userMessage: parsed.subject ?? "",
+  });
 }
