@@ -1,6 +1,8 @@
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
 import { Reply } from "../replies";
+import { buildContext } from "../context";
+import { generateFinancialInsight, generateBillsInsight } from "../insight";
 
 // ── Log expense or income ─────────────────────────────────────────────────────
 
@@ -21,8 +23,10 @@ export async function handleLogExpense(
   });
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-    .toLocaleDateString("en-CA", { timeZone: TZ });
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
+    "en-CA",
+    { timeZone: TZ }
+  );
 
   const description =
     parsed.subject ?? (direction === "income" ? "รายได้" : "รายจ่าย");
@@ -81,6 +85,10 @@ export async function handleLogExpense(
   const remainingBudget =
     monthlyBudget !== null ? monthlyBudget - monthExpenseTotal : null;
 
+  const context = await buildContext(userId);
+  const financialInsight = generateFinancialInsight(context);
+  const billsInsight = generateBillsInsight(context);
+
   if (parsed.language === "th") {
     if (direction === "income") {
       return `รับทราบครับ 🐾
@@ -105,21 +113,23 @@ ${parsed.amount.toLocaleString("th-TH")} บาท
 
 งบเดือนนี้: ${monthlyBudget.toLocaleString("th-TH")} บาท
 คงเหลือ: ${remainingBudget.toLocaleString("th-TH")} บาท`;
-
-      if (remainingBudget < 0) {
-        reply += `
-
-⚠️ เดือนนี้ใช้เกินงบแล้วครับ`;
-      } else if (remainingBudget <= monthlyBudget * 0.2) {
-        reply += `
-
-⚠️ งบคงเหลือน้อยกว่า 20% แล้วนะครับ`;
-      }
     } else {
       reply += `
 
 ถ้าต้องการให้ผมช่วยติดตามงบ ลองพิมพ์:
 “งบเดือนละ 25000”`;
+    }
+
+    if (financialInsight) {
+      reply += `
+
+${financialInsight}`;
+    }
+
+    if (billsInsight) {
+      reply += `
+
+${billsInsight}`;
     }
 
     return reply;
@@ -184,8 +194,10 @@ export async function handleQuerySpending(
     label = parsed.language === "th" ? "7 วันที่ผ่านมา" : "last 7 days";
   } else {
     const now = new Date();
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toLocaleDateString("en-CA", { timeZone: TZ });
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
+      "en-CA",
+      { timeZone: TZ }
+    );
     label = parsed.language === "th" ? "เดือนนี้" : "this month";
   }
 
