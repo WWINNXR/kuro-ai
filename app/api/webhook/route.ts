@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import * as line from "@line/bot-sdk";
 import { getOrCreateUser } from "@/lib/supabase";
 import { parseMessage } from "@/lib/openai";
+
+import { getActiveTask, startTask } from "@/lib/task-manager";
+import { handleConversationTask } from "@/lib/handlers/conversation";
+
 import { handleReminder } from "@/lib/handlers/reminder";
 import {
   handleCreateEvent,
@@ -67,12 +71,41 @@ async function handleEvent(event: line.WebhookEvent) {
 
     const parsed = await parseMessage(text, nowBangkok);
 
+    const activeTask = await getActiveTask(user.id);
+
+    if (activeTask) {
+      const conversationReply = await handleConversationTask(user.id, parsed);
+
+      if (conversationReply) {
+        await lineClient.replyMessage({
+          replyToken,
+          messages: [{ type: "text", text: conversationReply }],
+        });
+
+        return;
+      }
+    }
+
     let replyText = "";
 
     switch (parsed.intent) {
-      case "create_reminder":
+      case "create_reminder": {
+        if (!parsed.subject || !parsed.datetime) {
+          await startTask(user.id, "create_reminder", {
+            subject: parsed.subject ?? null,
+            datetime: parsed.datetime ?? null,
+          });
+
+          replyText = !parsed.subject
+            ? "อยากให้เตือนเรื่องอะไรครับ 🐾"
+            : `อยากให้เตือนเรื่อง “${parsed.subject}” วันไหนและกี่โมงครับ 🐾`;
+
+          break;
+        }
+
         replyText = await handleReminder(user.id, parsed);
         break;
+      }
 
       case "create_event":
         replyText = await handleCreateEvent(user.id, parsed);
