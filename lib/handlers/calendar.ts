@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
+import { createGoogleCalendarEvent } from "../google-calendar";
 
 // ── Create event ─────────────────────────────────────────────────────────────
 
@@ -29,6 +30,19 @@ export async function handleCreateEvent(
 
   if (error) throw error;
 
+  const shouldAddMeet =
+    parsed.subject.toLowerCase().includes("meet") ||
+    parsed.subject.toLowerCase().includes("google meet") ||
+    parsed.subject.includes("มีต") ||
+    parsed.subject.includes("ประชุม");
+
+  const googleEvent = await createGoogleCalendarEvent({
+    userId,
+    title: parsed.subject,
+    startAt,
+    addMeet: shouldAddMeet,
+  });
+
   const dateStr = startAt.toLocaleDateString("th-TH", {
     timeZone: "Asia/Bangkok",
     weekday: "long",
@@ -42,19 +56,29 @@ export async function handleCreateEvent(
     minute: "2-digit",
   });
 
+  const googleText = googleEvent
+    ? `
+
+🌐 Google Calendar: เชื่อมแล้ว${
+        googleEvent.meetLink ? `\n🔗 Google Meet: ${googleEvent.meetLink}` : ""
+      }`
+    : "";
+
   return parsed.language === "th"
     ? `รับทราบครับ 🐾
 
 ผมบันทึกนัดหมายเรียบร้อยแล้ว
 
 📅 นัด: ${parsed.subject}
-🕒 เวลา: ${dateStr} ${timeStr}`
+🕒 เวลา: ${dateStr} ${timeStr}${googleText}`
     : `Saved 🐾
 
 Event created
 
 📅 Event: ${parsed.subject}
-🕒 Time: ${dateStr} ${timeStr}`;
+🕒 Time: ${dateStr} ${timeStr}${
+        googleEvent?.meetLink ? `\n🔗 Google Meet: ${googleEvent.meetLink}` : ""
+      }`;
 }
 
 // ── Query events ─────────────────────────────────────────────────────────────
