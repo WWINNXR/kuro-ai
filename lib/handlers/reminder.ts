@@ -1,4 +1,4 @@
-import { Reply } from "../replies";
+import { Reply } from "./replies";
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
 import { KURO_PERSONALITY } from "../personality";
@@ -57,3 +57,4 @@ export async function handleReminder(
   : `Saved ✓
 Reminder: ${parsed.subject}
 ${dateStr} at ${timeStr}${recurring}`;
+}
