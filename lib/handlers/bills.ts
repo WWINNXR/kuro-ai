@@ -9,8 +9,8 @@ export async function handleCreateBill(
 ): Promise<string> {
   if (!parsed.subject) {
     return parsed.language === "th"
-      ? "ช่วยบอกชื่อบิลด้วยนะ เช่น 'ค่าไฟครบกำหนดวันที่ 25'"
-      : "Please include the bill name, e.g. 'electricity bill due on the 25th'";
+      ? "ขอชื่อบิลเพิ่มนิดนึงครับ 🐾\nเช่น ค่าไฟครบกำหนดวันที่ 25"
+      : "Please include the bill name, e.g. electricity bill due on the 25th";
   }
 
   const recurrence = parsed.recurrence ?? "once";
@@ -22,8 +22,8 @@ export async function handleCreateBill(
     nextDueAt = nextOccurrenceOfDay(parsed.due_day);
   } else {
     return parsed.language === "th"
-      ? "ครบกำหนดวันไหนนะ? เช่น 'ค่าไฟวันที่ 25'"
-      : "When is it due? e.g. 'electricity on the 25th'";
+      ? "บิลนี้ครบกำหนดวันไหนครับ?\nเช่น ค่าไฟวันที่ 25"
+      : "When is it due? e.g. electricity on the 25th";
   }
 
   const { error } = await supabase.from("bills").insert({
@@ -39,18 +39,29 @@ export async function handleCreateBill(
   if (error) throw error;
 
   const amountStr = parsed.amount
-    ? ` ${parsed.amount.toLocaleString("th-TH")} บาท`
+    ? `\n💰 จำนวน: ${parsed.amount.toLocaleString("th-TH")} บาท`
     : "";
+
   const recurrenceStr =
     recurrence === "monthly"
       ? parsed.language === "th"
-        ? " (ทุกเดือน)"
-        : " (monthly)"
+        ? "\n🔁 เตือนซ้ำทุกเดือน"
+        : "\n🔁 Monthly recurring"
       : "";
 
   return parsed.language === "th"
-    ? `บันทึกบิลแล้ว ✓\n💸 ${parsed.subject}${amountStr}\nครบกำหนด: ${formatDate(nextDueAt)}${recurrenceStr}`
-    : `Bill saved ✓\n💸 ${parsed.subject}${amountStr}\nDue: ${formatDate(nextDueAt)}${recurrenceStr}`;
+    ? `รับทราบครับ 🐾
+
+ผมบันทึกบิลเรียบร้อยแล้ว
+
+💳 บิล: ${parsed.subject}${amountStr}
+📅 ครบกำหนด: ${formatDate(nextDueAt)}${recurrenceStr}`
+    : `Saved 🐾
+
+Bill created
+
+💳 Bill: ${parsed.subject}${amountStr}
+📅 Due: ${formatDate(nextDueAt)}${recurrenceStr}`;
 }
 
 // ── Query bills ───────────────────────────────────────────────────────────────
@@ -59,7 +70,6 @@ export async function handleQueryBills(
   userId: string,
   parsed: ParsedMessage
 ): Promise<string> {
-  // Get this month's bills
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
     .toISOString()
@@ -80,14 +90,14 @@ export async function handleQueryBills(
 
   if (!data || data.length === 0) {
     return parsed.language === "th"
-      ? "ไม่มีบิลเดือนนี้เลย 🐾"
-      : "No bills this month 🐾";
+      ? "เดือนนี้ยังไม่พบบิลที่ต้องจ่ายครับ 🐾"
+      : "No bills found this month 🐾";
   }
 
   const lines = data.map((b) => {
-    const status = b.status === "paid" ? "✓" : "⏳";
-    const amount = b.amount ? ` ${b.amount.toLocaleString("th-TH")} บาท` : "";
-    return `${status} ${b.name}${amount} — ${formatDate(b.next_due_at)}`;
+    const status = b.status === "paid" ? "✅" : "⏳";
+    const amount = b.amount ? ` — ${b.amount.toLocaleString("th-TH")} บาท` : "";
+    return `${status} ${b.name}${amount}\n📅 ${formatDate(b.next_due_at)}`;
   });
 
   const unpaidTotal = data
@@ -98,14 +108,15 @@ export async function handleQueryBills(
     parsed.language === "th"
       ? `📋 บิลเดือนนี้\n\n`
       : `📋 This month's bills\n\n`;
+
   const footer =
     unpaidTotal > 0
       ? parsed.language === "th"
-        ? `\nรวมที่ยังไม่ได้จ่าย: ${unpaidTotal.toLocaleString("th-TH")} บาท`
-        : `\nTotal unpaid: ${unpaidTotal.toLocaleString("th-TH")} THB`
+        ? `\n\nรวมที่ยังไม่ได้จ่าย: ${unpaidTotal.toLocaleString("th-TH")} บาท`
+        : `\n\nTotal unpaid: ${unpaidTotal.toLocaleString("th-TH")} THB`
       : "";
 
-  return header + lines.join("\n") + footer;
+  return header + lines.join("\n\n") + footer;
 }
 
 // ── Mark bill paid ────────────────────────────────────────────────────────────
@@ -116,11 +127,10 @@ export async function handleMarkBillPaid(
 ): Promise<string> {
   if (!parsed.subject) {
     return parsed.language === "th"
-      ? "จ่ายบิลอะไรไปแล้ว? บอกชื่อบิลด้วยนะ"
+      ? "จ่ายบิลอะไรไปแล้วครับ?\nบอกชื่อบิลให้ผมหน่อย 🐾"
       : "Which bill did you pay? Please include the bill name.";
   }
 
-  // Find the most recent unpaid bill matching the subject
   const { data, error } = await supabase
     .from("bills")
     .select("*")
@@ -134,49 +144,53 @@ export async function handleMarkBillPaid(
 
   if (!data || data.length === 0) {
     return parsed.language === "th"
-      ? `ไม่พบบิล "${parsed.subject}" ที่ยังค้างอยู่`
+      ? `ยังไม่พบบิล "${parsed.subject}" ที่ค้างอยู่ครับ`
       : `No unpaid bill found matching "${parsed.subject}"`;
   }
 
   const bill = data[0];
+
   const updates: Record<string, unknown> = {
     status: "paid",
     paid_at: new Date().toISOString(),
   };
 
-  // If monthly recurring, advance next_due_at by one month
   if (bill.recurrence === "monthly" && bill.due_day) {
-    updates.status = "unpaid";
-    updates.paid_at = null;
-    updates.next_due_at = nextOccurrenceOfDay(bill.due_day, true);
-
-    // Also mark this occurrence as paid in a separate log (simplified: just advance)
     await supabase
       .from("bills")
       .update({ status: "paid", paid_at: new Date().toISOString() })
       .eq("id", bill.id);
 
-    // Insert next cycle
+    const nextDue = nextOccurrenceOfDay(bill.due_day, true);
+
     await supabase.from("bills").insert({
       user_id: userId,
       name: bill.name,
       amount: bill.amount,
       due_day: bill.due_day,
-      next_due_at: nextOccurrenceOfDay(bill.due_day, true),
+      next_due_at: nextDue,
       recurrence: "monthly",
       status: "unpaid",
     });
 
     return parsed.language === "th"
-      ? `✓ บันทึกการจ่าย ${bill.name} แล้ว\nรอบถัดไปวันที่ ${nextOccurrenceOfDay(bill.due_day, true)}`
-      : `✓ Marked ${bill.name} as paid\nNext due: ${nextOccurrenceOfDay(bill.due_day, true)}`;
+      ? `เรียบร้อยครับ 🐾
+
+บันทึกว่า “${bill.name}” จ่ายแล้ว
+
+📅 รอบถัดไป: ${formatDate(nextDue)}`
+      : `Done 🐾
+
+Marked "${bill.name}" as paid
+
+📅 Next due: ${formatDate(nextDue)}`;
   }
 
   await supabase.from("bills").update(updates).eq("id", bill.id);
 
   return parsed.language === "th"
-    ? `✓ จ่าย ${bill.name} แล้ว`
-    : `✓ Marked ${bill.name} as paid`;
+    ? `เรียบร้อยครับ 🐾\nบันทึกว่า “${bill.name}” จ่ายแล้ว`
+    : `Done 🐾\nMarked "${bill.name}" as paid`;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -187,6 +201,7 @@ function nextOccurrenceOfDay(day: number, skipThisMonth = false): string {
   const month = now.getMonth();
 
   let candidate = new Date(year, month, day);
+
   if (skipThisMonth || candidate <= now) {
     candidate = new Date(year, month + 1, day);
   }
