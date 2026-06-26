@@ -107,6 +107,15 @@ export async function routeIntent(
     case "casual_chat":
       return await handleCasualChat(userId, parsed);
 
+    case "connect_google":
+      return `ได้ครับ ${name} 🐾
+
+กดลิงก์นี้เพื่อเชื่อม Google Calendar กับ Kuro:
+
+https://kuro-ai-black.vercel.app/api/google/connect?userId=${userId}
+
+หลังเชื่อมเสร็จ ผมจะสามารถสร้างนัดลง Google Calendar และสร้าง Google Meet link ให้ได้ครับ`;
+
     default:
       return parsed.language === "th"
         ? `ขออภัยครับ ${name} 🐾
@@ -121,7 +130,8 @@ export async function routeIntent(
 💳 เดือนนี้ต้องจ่ายอะไร
 🧠 จำไว้ว่าผมชื่อวิน
 🍹 น้ำร้านนี้อร่อย
-😮‍💨 วันนี้เหนื่อยมาก`
+😮‍💨 วันนี้เหนื่อยมาก
+🔗 เชื่อม Google Calendar`
         : `Sorry ${name} 🐾
 
 I'm not sure what you mean.
@@ -134,6 +144,7 @@ Try:
 💳 What bills are due?
 🧠 Remember my name is Win
 🍹 This drink is good
-😮‍💨 I'm tired today`;
+😮‍💨 I'm tired today
+🔗 Connect Google Calendar`;
   }
 }

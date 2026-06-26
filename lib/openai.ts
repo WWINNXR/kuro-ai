@@ -24,6 +24,7 @@ export type Intent =
   | "query_preference"
   | "casual_chat"
   | "mood_check"
+  | "connect_google"
   | "unknown";
 
 export interface ParsedMessage {
@@ -143,6 +144,7 @@ Valid intents:
 - query_preference  → user asks what they like/dislike เช่น เราชอบร้านไหน, ร้านไหนไม่เอาแล้ว
 - casual_chat       → user wants to chat casually เช่น คุยเล่นหน่อย, เบื่อจัง, hello
 - mood_check        → user expresses emotion/mood เช่น วันนี้เหนื่อย, เครียด, เบื่อ, ดีใจ
+- connect_google    → user wants to connect Google Calendar/Gmail/Meet account
 - unknown           → cannot determine intent
 
 Memory examples:
@@ -171,6 +173,7 @@ Rules:
 - If user says "น้ำร้านนี้อร่อย", use save_preference, preference_category="drink", preference_sentiment="like", preference_value="น้ำร้านนี้".
 - If user asks "เราชอบร้านไหน", "ร้านไหนที่ไม่ชอบ", classify as query_preference.
 - If user says they are tired, stressed, sad, bored, classify as mood_check.
+- If user says "เชื่อม Google", "เชื่อม Google Calendar", "ลิงก์ Google", "connect Google", classify as connect_google.
 - If user says casual phrases without clear task, classify as casual_chat.
 
 Kuro v2 routing:
