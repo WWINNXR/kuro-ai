@@ -18,6 +18,8 @@ export async function aiReply(input: AiReplyInput): Promise<string> {
 
   const contextText = buildContextText(input.context);
 
+  console.log("=== AI REPLY CALLED ===");
+  
   const response = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.7,
