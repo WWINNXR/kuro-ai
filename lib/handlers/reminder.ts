@@ -50,16 +50,10 @@ export async function handleReminder(
     : "";
 
   return parsed.language === "th"
-    ? `${KURO_PERSONALITY.confirm[0]}
-
-ผมบันทึกการเตือนเรียบร้อยแล้ว
-
-📌 เรื่อง: ${parsed.subject}
-🕒 เวลา: ${dateStr} ${timeStr}${recurring}`
-    : `Saved 🐾
-
-Reminder created
-
-📌 Subject: ${parsed.subject}
-🕒 Time: ${dateStr} ${timeStr}${recurring}`;
-}
+  ? Reply.reminderCreated(
+      parsed.subject,
+      `${dateStr} เวลา ${timeStr}${recurring}`
+    )
+  : `Saved ✓
+Reminder: ${parsed.subject}
+${dateStr} at ${timeStr}${recurring}`;
