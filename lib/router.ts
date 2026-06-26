@@ -28,11 +28,17 @@ import {
   handleQueryMemory,
 } from "./handlers/memory";
 
+function displayName(context?: KuroContext): string {
+  return context?.profile?.nickname ?? "คุณ";
+}
+
 export async function routeIntent(
   userId: string,
   parsed: ParsedMessage,
-  _context?: KuroContext
+  context?: KuroContext
 ): Promise<string> {
+  const name = displayName(context);
+
   switch (parsed.intent) {
     case "create_reminder": {
       if (!parsed.subject || !parsed.datetime) {
@@ -42,8 +48,8 @@ export async function routeIntent(
         });
 
         return !parsed.subject
-          ? "อยากให้เตือนเรื่องอะไรครับ 🐾"
-          : `อยากให้เตือนเรื่อง "${parsed.subject}" วันไหนและกี่โมงครับ 🐾`;
+          ? `${name} อยากให้เตือนเรื่องอะไรครับ 🐾`
+          : `${name} อยากให้เตือนเรื่อง “${parsed.subject}” วันไหนและกี่โมงครับ 🐾`;
       }
 
       return await handleReminder(userId, parsed);
@@ -84,7 +90,7 @@ export async function routeIntent(
 
     default:
       return parsed.language === "th"
-        ? `ขออภัยครับ 🐾
+        ? `ขออภัยครับ ${name} 🐾
 
 ผมยังไม่แน่ใจว่าคุณต้องการให้ช่วยเรื่องอะไร
 
@@ -95,7 +101,7 @@ export async function routeIntent(
 📅 วันนี้มีนัดอะไร
 💳 เดือนนี้ต้องจ่ายอะไร
 🧠 จำไว้ว่าผมชื่อวิน`
-        : `Sorry 🐾
+        : `Sorry ${name} 🐾
 
 I'm not sure what you mean.
 
