@@ -3,6 +3,7 @@ import type { ParsedMessage } from "../openai";
 import { Reply } from "../replies";
 import { buildContext } from "../context";
 import { generateFinancialInsight, generateBillsInsight } from "../insight";
+import { generateReasoningNote } from "../reasoner";
 
 // ── Log expense or income ─────────────────────────────────────────────────────
 
@@ -23,10 +24,8 @@ export async function handleLogExpense(
   });
 
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
-    "en-CA",
-    { timeZone: TZ }
-  );
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    .toLocaleDateString("en-CA", { timeZone: TZ });
 
   const description =
     parsed.subject ?? (direction === "income" ? "รายได้" : "รายจ่าย");
@@ -88,6 +87,7 @@ export async function handleLogExpense(
   const context = await buildContext(userId);
   const financialInsight = generateFinancialInsight(context);
   const billsInsight = generateBillsInsight(context);
+  const reasoningNote = generateReasoningNote(context);
 
   if (parsed.language === "th") {
     if (direction === "income") {
@@ -132,6 +132,12 @@ ${financialInsight}`;
 ${billsInsight}`;
     }
 
+    if (reasoningNote) {
+      reply += `
+
+${reasoningNote}`;
+    }
+
     return reply;
   }
 
@@ -155,11 +161,21 @@ ${parsed.amount.toLocaleString("th-TH")} THB
 Total spending today: ${todayTotal.toLocaleString("th-TH")} THB
 This month: ${monthExpenseTotal.toLocaleString("th-TH")} THB`;
 
-  if (direction === "expense" && monthlyBudget !== null && remainingBudget !== null) {
+  if (
+    direction === "expense" &&
+    monthlyBudget !== null &&
+    remainingBudget !== null
+  ) {
     reply += `
 
 Monthly budget: ${monthlyBudget.toLocaleString("th-TH")} THB
 Remaining: ${remainingBudget.toLocaleString("th-TH")} THB`;
+  }
+
+  if (direction === "expense" && reasoningNote) {
+    reply += `
+
+${reasoningNote}`;
   }
 
   return reply;
@@ -194,10 +210,8 @@ export async function handleQuerySpending(
     label = parsed.language === "th" ? "7 วันที่ผ่านมา" : "last 7 days";
   } else {
     const now = new Date();
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
-      "en-CA",
-      { timeZone: TZ }
-    );
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toLocaleDateString("en-CA", { timeZone: TZ });
     label = parsed.language === "th" ? "เดือนนี้" : "this month";
   }
 
@@ -232,6 +246,11 @@ export async function handleQuerySpending(
     ? Number(profile.monthly_budget)
     : null;
 
+  const context = await buildContext(userId);
+  const financialInsight = generateFinancialInsight(context);
+  const billsInsight = generateBillsInsight(context);
+  const reasoningNote = generateReasoningNote(context);
+
   if (rows.length === 0) {
     return parsed.language === "th"
       ? `ยังไม่พบรายการ${label}ครับ 🐾`
@@ -257,16 +276,24 @@ export async function handleQuerySpending(
 
 🎯 งบเดือนนี้: ${monthlyBudget.toLocaleString("th-TH")} บาท
 📌 งบคงเหลือ: ${remainingBudget.toLocaleString("th-TH")} บาท`;
+    }
 
-      if (remainingBudget < 0) {
-        reply += `
+    if (financialInsight) {
+      reply += `
 
-⚠️ เดือนนี้ใช้เกินงบแล้วครับ`;
-      } else if (remainingBudget <= monthlyBudget * 0.2) {
-        reply += `
+${financialInsight}`;
+    }
 
-⚠️ งบคงเหลือน้อยกว่า 20% แล้วนะครับ`;
-      }
+    if (billsInsight) {
+      reply += `
+
+${billsInsight}`;
+    }
+
+    if (reasoningNote) {
+      reply += `
+
+${reasoningNote}`;
     }
 
     return reply.trim();
