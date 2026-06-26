@@ -1,5 +1,6 @@
 import { supabase } from "../supabase";
 import type { ParsedMessage } from "../openai";
+import { Reply } from "../replies";
 
 // ── Log expense or income ─────────────────────────────────────────────────────
 
@@ -10,17 +11,20 @@ export async function handleLogExpense(
 ): Promise<string> {
   if (!parsed.amount || parsed.amount <= 0) {
     return parsed.language === "th"
-      ? "ช่วยบอกจำนวนเงินด้วยนะ เช่น 'กาแฟ 120'"
-      : "Please include the amount, e.g. 'coffee 120'";
+      ? "ขอจำนวนเงินเพิ่มนิดนึงครับ 🐾\nเช่น กาแฟ 120"
+      : "Please include the amount, e.g. coffee 120";
   }
 
   const todayBangkok = new Date().toLocaleDateString("en-CA", {
     timeZone: "Asia/Bangkok",
   });
 
+  const description =
+    parsed.subject ?? (direction === "income" ? "รายได้" : "รายจ่าย");
+
   const { error } = await supabase.from("expenses").insert({
     user_id: userId,
-    description: parsed.subject ?? (direction === "income" ? "รายได้" : "รายจ่าย"),
+    description,
     amount: parsed.amount,
     direction,
     spent_at: todayBangkok,
@@ -28,7 +32,6 @@ export async function handleLogExpense(
 
   if (error) throw error;
 
-  // Get today's total for this direction
   const { data: todayData } = await supabase
     .from("expenses")
     .select("amount")
@@ -41,26 +44,39 @@ export async function handleLogExpense(
     0
   );
 
-  const emoji = direction === "income" ? "💰" : "💸";
-  const label =
-    direction === "income"
-      ? parsed.language === "th"
-        ? "รายได้"
-        : "income"
-      : parsed.language === "th"
-      ? "รายจ่าย"
-      : "expense";
+  if (parsed.language === "th") {
+    if (direction === "income") {
+      return `รับทราบครับ 🐾
 
-  const todayLabel =
-    parsed.language === "th"
-      ? `${label}วันนี้รวม: ${todayTotal.toLocaleString("th-TH")} บาท`
-      : `Total ${label} today: ${todayTotal.toLocaleString("th-TH")} THB`;
+บันทึกรายรับเรียบร้อยแล้ว
 
-  const desc = parsed.subject ?? "";
+💰 ${description}
+${parsed.amount.toLocaleString("th-TH")} บาท
 
-  return parsed.language === "th"
-    ? `${emoji} บันทึกแล้ว\n${desc} ${parsed.amount.toLocaleString("th-TH")} บาท\n${todayLabel}`
-    : `${emoji} Saved\n${desc} ${parsed.amount.toLocaleString("th-TH")} THB\n${todayLabel}`;
+วันนี้มีรายรับรวม ${todayTotal.toLocaleString("th-TH")} บาท`;
+    }
+
+    return Reply.expenseLogged(description, parsed.amount) +
+      `\n\nวันนี้ใช้จ่ายรวม ${todayTotal.toLocaleString("th-TH")} บาท`;
+  }
+
+  return direction === "income"
+    ? `Saved 🐾
+
+Income logged
+
+💰 ${description}
+${parsed.amount.toLocaleString("th-TH")} THB
+
+Total income today: ${todayTotal.toLocaleString("th-TH")} THB`
+    : `Saved 🐾
+
+Expense logged
+
+💸 ${description}
+${parsed.amount.toLocaleString("th-TH")} THB
+
+Total spending today: ${todayTotal.toLocaleString("th-TH")} THB`;
 }
 
 // ── Query spending ────────────────────────────────────────────────────────────
@@ -91,10 +107,11 @@ export async function handleQuerySpending(
     startDate = weekAgo.toLocaleDateString("en-CA", { timeZone: TZ });
     label = parsed.language === "th" ? "7 วันที่ผ่านมา" : "last 7 days";
   } else {
-    // month
     const now = new Date();
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
-      .toLocaleDateString("en-CA", { timeZone: TZ });
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
+      "en-CA",
+      { timeZone: TZ }
+    );
     label = parsed.language === "th" ? "เดือนนี้" : "this month";
   }
 
@@ -108,34 +125,46 @@ export async function handleQuerySpending(
   if (error) throw error;
 
   const rows = data ?? [];
+
   const totalExpense = rows
     .filter((r) => r.direction === "expense")
     .reduce((sum, r) => sum + Number(r.amount), 0);
+
   const totalIncome = rows
     .filter((r) => r.direction === "income")
     .reduce((sum, r) => sum + Number(r.amount), 0);
 
   if (rows.length === 0) {
     return parsed.language === "th"
-      ? `ยังไม่มีรายการ${label}เลย`
+      ? `ยังไม่พบรายการ${label}ครับ 🐾`
       : `No records for ${label}`;
   }
 
   if (parsed.language === "th") {
-    let reply = `📊 สรุป${label}\n`;
-    reply += `รายจ่าย: ${totalExpense.toLocaleString("th-TH")} บาท\n`;
-    if (totalIncome > 0)
-      reply += `รายได้: ${totalIncome.toLocaleString("th-TH")} บาท\n`;
-    if (totalIncome > 0)
-      reply += `คงเหลือ: ${(totalIncome - totalExpense).toLocaleString("th-TH")} บาท`;
-    return reply.trim();
-  } else {
-    let reply = `📊 Summary for ${label}\n`;
-    reply += `Expenses: ${totalExpense.toLocaleString("th-TH")} THB\n`;
-    if (totalIncome > 0)
-      reply += `Income: ${totalIncome.toLocaleString("th-TH")} THB\n`;
-    if (totalIncome > 0)
-      reply += `Balance: ${(totalIncome - totalExpense).toLocaleString("th-TH")} THB`;
+    let reply = `📊 สรุปการเงิน${label}
+
+💸 รายจ่าย: ${totalExpense.toLocaleString("th-TH")} บาท`;
+
+    if (totalIncome > 0) {
+      reply += `
+
+💰 รายรับ: ${totalIncome.toLocaleString("th-TH")} บาท
+🧾 คงเหลือ: ${(totalIncome - totalExpense).toLocaleString("th-TH")} บาท`;
+    }
+
     return reply.trim();
   }
+
+  let reply = `📊 Financial summary for ${label}
+
+Expenses: ${totalExpense.toLocaleString("th-TH")} THB`;
+
+  if (totalIncome > 0) {
+    reply += `
+
+Income: ${totalIncome.toLocaleString("th-TH")} THB
+Balance: ${(totalIncome - totalExpense).toLocaleString("th-TH")} THB`;
+  }
+
+  return reply.trim();
 }
