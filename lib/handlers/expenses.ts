@@ -15,9 +15,14 @@ export async function handleLogExpense(
       : "Please include the amount, e.g. coffee 120";
   }
 
+  const TZ = "Asia/Bangkok";
   const todayBangkok = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Bangkok",
+    timeZone: TZ,
   });
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    .toLocaleDateString("en-CA", { timeZone: TZ });
 
   const description =
     parsed.subject ?? (direction === "income" ? "รายได้" : "รายจ่าย");
@@ -32,17 +37,49 @@ export async function handleLogExpense(
 
   if (error) throw error;
 
-  const { data: todayData } = await supabase
+  const { data: todayData, error: todayError } = await supabase
     .from("expenses")
     .select("amount")
     .eq("user_id", userId)
     .eq("direction", direction)
     .eq("spent_at", todayBangkok);
 
+  if (todayError) throw todayError;
+
   const todayTotal = (todayData ?? []).reduce(
     (sum, row) => sum + Number(row.amount),
     0
   );
+
+  const { data: monthData, error: monthError } = await supabase
+    .from("expenses")
+    .select("amount")
+    .eq("user_id", userId)
+    .eq("direction", "expense")
+    .gte("spent_at", monthStart)
+    .lte("spent_at", todayBangkok);
+
+  if (monthError) throw monthError;
+
+  const monthExpenseTotal = (monthData ?? []).reduce(
+    (sum, row) => sum + Number(row.amount),
+    0
+  );
+
+  const { data: profile, error: profileError } = await supabase
+    .from("user_profile")
+    .select("monthly_budget")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  const monthlyBudget = profile?.monthly_budget
+    ? Number(profile.monthly_budget)
+    : null;
+
+  const remainingBudget =
+    monthlyBudget !== null ? monthlyBudget - monthExpenseTotal : null;
 
   if (parsed.language === "th") {
     if (direction === "income") {
@@ -56,12 +93,41 @@ ${parsed.amount.toLocaleString("th-TH")} บาท
 วันนี้มีรายรับรวม ${todayTotal.toLocaleString("th-TH")} บาท`;
     }
 
-    return Reply.expenseLogged(description, parsed.amount) +
-      `\n\nวันนี้ใช้จ่ายรวม ${todayTotal.toLocaleString("th-TH")} บาท`;
+    let reply =
+      Reply.expenseLogged(description, parsed.amount) +
+      `
+
+วันนี้ใช้จ่ายรวม ${todayTotal.toLocaleString("th-TH")} บาท
+เดือนนี้ใช้ไป ${monthExpenseTotal.toLocaleString("th-TH")} บาท`;
+
+    if (monthlyBudget !== null && remainingBudget !== null) {
+      reply += `
+
+งบเดือนนี้: ${monthlyBudget.toLocaleString("th-TH")} บาท
+คงเหลือ: ${remainingBudget.toLocaleString("th-TH")} บาท`;
+
+      if (remainingBudget < 0) {
+        reply += `
+
+⚠️ เดือนนี้ใช้เกินงบแล้วครับ`;
+      } else if (remainingBudget <= monthlyBudget * 0.2) {
+        reply += `
+
+⚠️ งบคงเหลือน้อยกว่า 20% แล้วนะครับ`;
+      }
+    } else {
+      reply += `
+
+ถ้าต้องการให้ผมช่วยติดตามงบ ลองพิมพ์:
+“งบเดือนละ 25000”`;
+    }
+
+    return reply;
   }
 
-  return direction === "income"
-    ? `Saved 🐾
+  let reply =
+    direction === "income"
+      ? `Saved 🐾
 
 Income logged
 
@@ -69,14 +135,24 @@ Income logged
 ${parsed.amount.toLocaleString("th-TH")} THB
 
 Total income today: ${todayTotal.toLocaleString("th-TH")} THB`
-    : `Saved 🐾
+      : `Saved 🐾
 
 Expense logged
 
 💸 ${description}
 ${parsed.amount.toLocaleString("th-TH")} THB
 
-Total spending today: ${todayTotal.toLocaleString("th-TH")} THB`;
+Total spending today: ${todayTotal.toLocaleString("th-TH")} THB
+This month: ${monthExpenseTotal.toLocaleString("th-TH")} THB`;
+
+  if (direction === "expense" && monthlyBudget !== null && remainingBudget !== null) {
+    reply += `
+
+Monthly budget: ${monthlyBudget.toLocaleString("th-TH")} THB
+Remaining: ${remainingBudget.toLocaleString("th-TH")} THB`;
+  }
+
+  return reply;
 }
 
 // ── Query spending ────────────────────────────────────────────────────────────
@@ -108,10 +184,8 @@ export async function handleQuerySpending(
     label = parsed.language === "th" ? "7 วันที่ผ่านมา" : "last 7 days";
   } else {
     const now = new Date();
-    startDate = new Date(now.getFullYear(), now.getMonth(), 1).toLocaleDateString(
-      "en-CA",
-      { timeZone: TZ }
-    );
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1)
+      .toLocaleDateString("en-CA", { timeZone: TZ });
     label = parsed.language === "th" ? "เดือนนี้" : "this month";
   }
 
@@ -134,6 +208,18 @@ export async function handleQuerySpending(
     .filter((r) => r.direction === "income")
     .reduce((sum, r) => sum + Number(r.amount), 0);
 
+  const { data: profile, error: profileError } = await supabase
+    .from("user_profile")
+    .select("monthly_budget")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) throw profileError;
+
+  const monthlyBudget = profile?.monthly_budget
+    ? Number(profile.monthly_budget)
+    : null;
+
   if (rows.length === 0) {
     return parsed.language === "th"
       ? `ยังไม่พบรายการ${label}ครับ 🐾`
@@ -150,6 +236,25 @@ export async function handleQuerySpending(
 
 💰 รายรับ: ${totalIncome.toLocaleString("th-TH")} บาท
 🧾 คงเหลือ: ${(totalIncome - totalExpense).toLocaleString("th-TH")} บาท`;
+    }
+
+    if (period === "month" && monthlyBudget !== null) {
+      const remainingBudget = monthlyBudget - totalExpense;
+
+      reply += `
+
+🎯 งบเดือนนี้: ${monthlyBudget.toLocaleString("th-TH")} บาท
+📌 งบคงเหลือ: ${remainingBudget.toLocaleString("th-TH")} บาท`;
+
+      if (remainingBudget < 0) {
+        reply += `
+
+⚠️ เดือนนี้ใช้เกินงบแล้วครับ`;
+      } else if (remainingBudget <= monthlyBudget * 0.2) {
+        reply += `
+
+⚠️ งบคงเหลือน้อยกว่า 20% แล้วนะครับ`;
+      }
     }
 
     return reply.trim();
