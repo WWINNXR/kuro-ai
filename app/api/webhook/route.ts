@@ -2,29 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import * as line from "@line/bot-sdk";
 import { getOrCreateUser } from "@/lib/supabase";
 import { parseMessage } from "@/lib/openai";
-
-import { getActiveTask, startTask } from "@/lib/task-manager";
+import { getActiveTask } from "@/lib/task-manager";
 import { handleConversationTask } from "@/lib/handlers/conversation";
-
-import { handleReminder } from "@/lib/handlers/reminder";
-import {
-  handleCreateEvent,
-  handleQueryEvents,
-} from "@/lib/handlers/calendar";
-import {
-  handleCreateBill,
-  handleQueryBills,
-  handleMarkBillPaid,
-} from "@/lib/handlers/bills";
-import {
-  handleLogExpense,
-  handleQuerySpending,
-} from "@/lib/handlers/expenses";
-import { buildDailySummary } from "@/lib/handlers/summary";
-import {
-  handleSaveMemory,
-  handleQueryMemory,
-} from "@/lib/handlers/memory";
+import { routeIntent } from "@/lib/router";
+import { buildContext } from "@/lib/context";
 
 const lineConfig = {
   channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN!,
@@ -86,97 +67,8 @@ async function handleEvent(event: line.WebhookEvent) {
       }
     }
 
-    let replyText = "";
-
-    switch (parsed.intent) {
-      case "create_reminder": {
-        if (!parsed.subject || !parsed.datetime) {
-          await startTask(user.id, "create_reminder", {
-            subject: parsed.subject ?? null,
-            datetime: parsed.datetime ?? null,
-          });
-
-          replyText = !parsed.subject
-            ? "อยากให้เตือนเรื่องอะไรครับ 🐾"
-            : `อยากให้เตือนเรื่อง “${parsed.subject}” วันไหนและกี่โมงครับ 🐾`;
-
-          break;
-        }
-
-        replyText = await handleReminder(user.id, parsed);
-        break;
-      }
-
-      case "create_event":
-        replyText = await handleCreateEvent(user.id, parsed);
-        break;
-
-      case "query_events":
-        replyText = await handleQueryEvents(user.id, parsed);
-        break;
-
-      case "create_bill":
-        replyText = await handleCreateBill(user.id, parsed);
-        break;
-
-      case "query_bills":
-        replyText = await handleQueryBills(user.id, parsed);
-        break;
-
-      case "mark_bill_paid":
-        replyText = await handleMarkBillPaid(user.id, parsed);
-        break;
-
-      case "log_expense":
-        replyText = await handleLogExpense(user.id, parsed, "expense");
-        break;
-
-      case "log_income":
-        replyText = await handleLogExpense(user.id, parsed, "income");
-        break;
-
-      case "query_spending":
-        replyText = await handleQuerySpending(user.id, parsed);
-        break;
-
-      case "query_summary":
-        replyText = await buildDailySummary(user.id, parsed.language);
-        break;
-
-      case "save_memory":
-        replyText = await handleSaveMemory(user.id, parsed);
-        break;
-
-      case "query_memory":
-        replyText = await handleQueryMemory(user.id, parsed);
-        break;
-
-      default:
-        replyText =
-          parsed.language === "th"
-            ? `ขออภัยครับ 🐾
-
-ผมยังไม่แน่ใจว่าคุณต้องการให้ช่วยเรื่องอะไร
-
-ลองพิมพ์ตัวอย่างแบบนี้ได้เลย
-
-📌 เตือนประชุมพรุ่งนี้ 10 โมง
-💸 กาแฟ 120
-📅 วันนี้มีนัดอะไรบ้าง
-💳 เดือนนี้ต้องจ่ายอะไรบ้าง
-🧠 จำไว้ว่าเราชอบอเมริกาโน่`
-            : `Sorry 🐾
-
-I'm not quite sure what you mean.
-
-Try one of these:
-
-📌 Remind me about the meeting tomorrow at 10am
-💸 Coffee 120
-📅 What do I have today?
-💳 What bills are due this month?
-🧠 Remember that I like Americano`;
-    }
+    const context = await buildContext(user.id);
+    const replyText = await routeIntent(user.id, parsed, context);
 
     await lineClient.replyMessage({
       replyToken,
